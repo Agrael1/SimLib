@@ -42,7 +42,7 @@ namespace ver
         {
             printf("%s\n", __FUNCTION__);
         }
-    private:
+    public:
         std::coroutine_handle<promise_type> m_handle;
     };
 
@@ -51,12 +51,16 @@ namespace ver
 
     struct Action
     {
+        void operator delete(void*)
+        {
+
+        }
         struct promise_type
         {
             ver::Action get_return_object() noexcept
             {
                 printf("%s\n", __FUNCTION__);
-                return ver::Action{ std::coroutine_handle<promise_type>::from_promise(*this) };
+                return ver::Action{ std::coroutine_handle<promise_type>::from_promise(*this), *this };
             }
 
             void return_void() const noexcept
@@ -75,15 +79,20 @@ namespace ver
                 printf("%s\n", __FUNCTION__);
                 return{};
             }
+            std::suspend_always yield_value()noexcept
+            {
+                return{};
+            }
 
-            void unhandled_exception() const noexcept
+            std::suspend_always unhandled_exception() const noexcept
             {
                 printf("%s\n", __FUNCTION__);
+                return {};
             }
         };
     public:
-        explicit Action(std::coroutine_handle<promise_type> handle)
-            : m_handle(handle)
+        explicit Action(std::coroutine_handle<promise_type> handle, promise_type& promise)
+            : m_handle(handle), promise(promise)
         {
             printf("%s\n", __FUNCTION__);
         }
@@ -99,10 +108,78 @@ namespace ver
         {
             m_handle.resume();
         }
-    private:
+        auto yield()
+        {
+            return promise.yield_value();
+        }
+    public:
         std::coroutine_handle<promise_type> m_handle;
+        promise_type& promise;
     };
 
+    struct ResumableAction
+    {
+        struct promise_type
+        {
+            ver::ResumableAction get_return_object() noexcept
+            {
+                printf("%s\n", __FUNCTION__);
+                return ver::ResumableAction{ std::coroutine_handle<promise_type>::from_promise(*this) };
+            }
+
+            void return_void() const noexcept
+            {
+                printf("%s\n", __FUNCTION__);
+            }
+
+            std::suspend_never initial_suspend() const noexcept
+            {
+                printf("%s\n", __FUNCTION__);
+                return{};
+            }
+
+            std::suspend_always final_suspend() const noexcept
+            {
+                printf("%s\n", __FUNCTION__);
+                return{};
+            }
+            std::suspend_always yield_value()noexcept
+            {
+                return{};
+            }
+
+            std::suspend_always unhandled_exception() const noexcept
+            {
+                printf("%s\n", __FUNCTION__);
+                return {};
+            }
+        };
+    public:
+        explicit ResumableAction(std::coroutine_handle<promise_type> handle)
+            : m_handle(handle)
+        {
+            printf("%s\n", __FUNCTION__);
+        }
+        ~ResumableAction()
+        {
+            printf("%s\n", __FUNCTION__);
+            if (m_handle)m_handle.destroy();
+        }
+        //ResumableAction(const ResumableAction&) = delete;
+        //ResumableAction& operator=(const ResumableAction&) = delete;
+    public:
+        void resume()const
+        {
+            m_handle.resume();
+        }
+        void resume_parent()const
+        {
+            m_parenthandle.resume();
+        }
+    public:
+        std::coroutine_handle<promise_type> m_handle;
+        std::coroutine_handle<> m_parenthandle;
+    };
 
     template <typename Async>
     struct await_adapter
@@ -132,7 +209,40 @@ namespace ver
     private:
     };
 
+    template <>
+    struct await_adapter<ResumableAction>
+    {
+        await_adapter(ResumableAction& async) : async(async){ printf("%s\n", __FUNCTION__); }
+
+        ResumableAction& async;
+
+
+        bool await_ready() const noexcept
+        {
+            printf("%s\n", __FUNCTION__);
+            return true;
+        }
+
+        bool await_suspend(std::coroutine_handle<> handle)
+        {
+            printf("%s\n", __FUNCTION__);
+            async.m_parenthandle = handle;
+            return true;
+        }
+
+        auto await_resume() const
+        {
+            printf("%s\n", __FUNCTION__);
+            async.resume();
+        }
+    private:
+    };
+
     inline await_adapter<Action> operator co_await(Action const& async)
+    {
+        return{ async };
+    }
+    inline await_adapter<ResumableAction> operator co_await(ResumableAction& async)
     {
         return{ async };
     }

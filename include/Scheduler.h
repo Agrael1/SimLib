@@ -1,6 +1,5 @@
 #pragma once
 #include <queue>
-#include <Promises.h>
 #include <Process.h>
 
 class Process;
@@ -14,26 +13,26 @@ public:
 public:
 	void enqueue(process_ty& proc)
 	{
-		processes.emplace(proc);
+		processes.emplace(&proc);
 	}
-	void start()
+	ver::fire_and_forget start()
 	{
-		main_loop();
-		;
+		co_await backfire;
 	}
 private:
-	ver::fire_and_forget main_loop()
+	ver::Action main_loop()
 	{
 		while (time < finish_time && !processes.empty())
 		{
-			auto proc = std::move(processes.front());
-			auto x = proc.BehaviorImpl();
-			co_await x;
-			processes.pop();
+			auto proc{ processes.front() };
+			//proc->set(&backfire.m_handle);
+			co_await proc->behavior;
+			//processes.pop();
 		}
 	}
 private:
-	std::queue<process_ty> processes;
+	std::queue<process_ty*> processes;
+	ver::Action backfire = main_loop();
 	float time = 0.0f;
 	float finish_time;
 };
