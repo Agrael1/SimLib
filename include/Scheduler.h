@@ -15,24 +15,23 @@ public:
 	{
 		processes.emplace(&proc);
 	}
-	ver::fire_and_forget start()
+	void start()
 	{
-		co_await backfire;
+		main_loop();
 	}
 private:
-	ver::Action main_loop()
+	void main_loop()
 	{
 		while (time < finish_time && !processes.empty())
 		{
 			auto proc{ processes.front() };
-			//proc->set(&backfire.m_handle);
-			co_await proc->behavior;
+			proc->x.one_step();
+			printf("done\n");
 			//processes.pop();
 		}
 	}
 private:
 	std::queue<process_ty*> processes;
-	ver::Action backfire = main_loop();
 	float time = 0.0f;
 	float finish_time;
 };
