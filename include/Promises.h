@@ -1,249 +1,111 @@
 #pragma once
 #include <coroutine>
+#include <optional>
+
+#include <queue>
+
+std::queue<std::coroutine_handle<>> scheduler;
 
 namespace ver
 {
-    struct fire_and_forget
-    {
-        struct promise
-        {
-            ver::fire_and_forget get_return_object() noexcept
-            {
-                return ver::fire_and_forget{ std::coroutine_handle<promise>::from_promise(*this) };
-            }
-
-            constexpr void return_void() const noexcept
-            {
-            }
-
-            constexpr std::suspend_never initial_suspend() const noexcept
-            {
-                return{};
-            }
-
-            constexpr std::suspend_never final_suspend() const noexcept
-            {
-                return{};
-            }
-
-            constexpr void unhandled_exception() const noexcept
-            {
-
-            }
-        };
-    public:
-        using promise_type = promise;
-        explicit fire_and_forget(std::coroutine_handle<promise_type> handle)
-            : m_handle(handle)
-        {
-            printf("%s\n", __FUNCTION__);
-        }
-        ~fire_and_forget()
-        {
-            printf("%s\n", __FUNCTION__);
-        }
-    public:
-        std::coroutine_handle<promise_type> m_handle;
-    };
+	struct fire_and_forget
+	{
+		struct promise_type
+		{
+			auto get_return_object() noexcept {
+				return ver::fire_and_forget{ std::coroutine_handle<promise_type>::from_promise(*this) };
+			}
+			void return_void() const noexcept {}
+			std::suspend_never initial_suspend() const noexcept { return{}; }
+			std::suspend_never final_suspend() const noexcept { return{}; }
+			void unhandled_exception() const noexcept {}
+		};
+	public:
+		explicit fire_and_forget(std::coroutine_handle<promise_type> handle)
+			: m_handle(handle) {}
+	public:
+		std::coroutine_handle<promise_type> m_handle;
+	};
 
 
+	template <typename T, typename _Enable = void>
+	struct promise_return_base;
 
+	template <typename T>
+	struct promise_return_base<T, std::enable_if_t<std::is_void_v<T>>>
+	{
+	public:
+		void return_void() {}
+	};
 
-    struct Action
-    {
-        void operator delete(void*)
-        {
+	template <typename T>
+	struct promise_return_base<T, std::enable_if_t<!std::is_void_v<T>>>
+	{
+		std::optional<T> value;
+	public:
+		void return_value(T&& xvalue) { value = xvalue; }
+	};
 
-        }
-        struct promise_type
-        {
-            ver::Action get_return_object() noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return ver::Action{ std::coroutine_handle<promise_type>::from_promise(*this), *this };
-            }
+	template<std::floating_point U>
+	struct time_awaiter
+	{
+		U value;
+	public:
+		bool await_ready() { return false; }
+		auto await_suspend(std::coroutine_handle<> handle) {
+			if (!handle.done())
+				scheduler.push(handle);
+			scheduler.pop();
+			return scheduler.front();
+		}
+		U await_resume() { return value; }
+	};
 
-            void return_void() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-            }
+	template<typename T, class _Initial>
+	struct basic_action
+	{
+		struct promise_type : public promise_return_base<T>
+		{
+			auto get_return_object() noexcept {
+				return ver::basic_action{ std::coroutine_handle<promise_type>::from_promise(*this) };
+			}
+			_Initial initial_suspend() const noexcept { return{}; }
+			std::suspend_always final_suspend() const noexcept { return{}; }
+			void unhandled_exception() const noexcept { std::terminate(); }
 
-            std::suspend_always initial_suspend() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return{};
-            }
+			template<typename U>
+			auto await_transform(U&& val) { return val; }
 
-            std::suspend_always final_suspend() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return{};
-            }
-            std::suspend_always yield_value()noexcept
-            {
-                return{};
-            }
+			template<std::floating_point U>
+			auto await_transform(U&& val) { return time_awaiter<U>{val}; }
+		};
+	public:
+		using value_type = std::conditional_t<std::is_void_v<T>, void, std::optional<T>&>;
+		explicit basic_action(std::coroutine_handle<promise_type> handle)
+			: m_handle(handle) {}
+		~basic_action() {
+			if (m_handle)m_handle.destroy();
+		}
 
-            std::suspend_always unhandled_exception() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return {};
-            }
-        };
-    public:
-        explicit Action(std::coroutine_handle<promise_type> handle, promise_type& promise)
-            : m_handle(handle), promise(promise)
-        {
-            printf("%s\n", __FUNCTION__);
-        }
-        ~Action()
-        {
-            printf("%s\n", __FUNCTION__);
-            if(m_handle)m_handle.destroy();
-        }
-        Action(const Action&) = delete;
-        Action& operator=(const Action&) = delete;
-    public:
-        void resume()const
-        {
-            m_handle.resume();
-        }
-        auto yield()
-        {
-            return promise.yield_value();
-        }
-    public:
-        std::coroutine_handle<promise_type> m_handle;
-        promise_type& promise;
-    };
+		bool await_ready() { return false; }
+		auto await_suspend(std::coroutine_handle<> handle) {
+			if (!handle.done())
+				scheduler.push(handle);
+			scheduler.pop();
+			return scheduler.front();
+		}
+		value_type await_resume()
+		{
+			if constexpr (!std::is_void_v<T>)
+				return m_handle.promise().value;
+		}
+		value_type get() { return await_resume(); }
+	public:
+		std::coroutine_handle<promise_type> m_handle;
+	};
 
-    struct ResumableAction
-    {
-        struct promise_type
-        {
-            ver::ResumableAction get_return_object() noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return ver::ResumableAction{ std::coroutine_handle<promise_type>::from_promise(*this) };
-            }
-
-            void return_void() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-            }
-
-            std::suspend_never initial_suspend() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return{};
-            }
-
-            std::suspend_always final_suspend() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return{};
-            }
-            std::suspend_always yield_value()noexcept
-            {
-                return{};
-            }
-
-            std::suspend_always unhandled_exception() const noexcept
-            {
-                printf("%s\n", __FUNCTION__);
-                return {};
-            }
-        };
-    public:
-        explicit ResumableAction(std::coroutine_handle<promise_type> handle)
-            : m_handle(handle)
-        {
-            printf("%s\n", __FUNCTION__);
-        }
-        ~ResumableAction()
-        {
-            printf("%s\n", __FUNCTION__);
-            if (m_handle)m_handle.destroy();
-        }
-        //ResumableAction(const ResumableAction&) = delete;
-        //ResumableAction& operator=(const ResumableAction&) = delete;
-    public:
-        void resume()const
-        {
-            m_handle.resume();
-        }
-        void resume_parent()const
-        {
-            m_parenthandle.resume();
-        }
-    public:
-        std::coroutine_handle<promise_type> m_handle;
-        std::coroutine_handle<> m_parenthandle;
-    };
-
-    template <typename Async>
-    struct await_adapter
-    {
-        await_adapter(Async const& async) : async(async) { printf("%s\n", __FUNCTION__); }
-
-        Async const& async;
-
-
-        bool await_ready() const noexcept
-        {
-            printf("%s\n", __FUNCTION__);
-            return true;
-        }
-
-        bool await_suspend(std::coroutine_handle<> handle)
-        {
-            printf("%s\n", __FUNCTION__);
-            return true;
-        }
-
-        auto await_resume() const
-        {
-            printf("%s\n", __FUNCTION__);
-            async.resume();
-        }
-    private:
-    };
-
-    template <>
-    struct await_adapter<ResumableAction>
-    {
-        await_adapter(ResumableAction& async) : async(async){ printf("%s\n", __FUNCTION__); }
-
-        ResumableAction& async;
-
-
-        bool await_ready() const noexcept
-        {
-            printf("%s\n", __FUNCTION__);
-            return true;
-        }
-
-        bool await_suspend(std::coroutine_handle<> handle)
-        {
-            printf("%s\n", __FUNCTION__);
-            async.m_parenthandle = handle;
-            return true;
-        }
-
-        auto await_resume() const
-        {
-            printf("%s\n", __FUNCTION__);
-            async.resume();
-        }
-    private:
-    };
-
-    inline await_adapter<Action> operator co_await(Action const& async)
-    {
-        return{ async };
-    }
-    inline await_adapter<ResumableAction> operator co_await(ResumableAction& async)
-    {
-        return{ async };
-    }
+	using action = basic_action<void, std::suspend_never>;
+	using delayed_action = basic_action<void, std::suspend_always>;
+	template<typename T>using operation = basic_action<T, std::suspend_never>;
+	template<typename T>using delayed_operation = basic_action<T, std::suspend_always>;
 }

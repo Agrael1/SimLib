@@ -1,68 +1,43 @@
-#include <Scheduler.h>
+#include <Promises.h>
 
+ver::action Wait()
+{
+	co_await 0.5;
+}
 
-//volatile void* y = 0;
-//size_t ptr;
-//void* buf;
-//
-//ver::ResumableAction resuma()
-//{
-//	co_await std::suspend_always();
-//	int i = 10;
-//	i++;
-//}
+void func()
+{
+	puts(__FUNCTION__ " begin");
+	Wait();
+	puts(__FUNCTION__ " wait");
+	Wait();
+	puts(__FUNCTION__ " end");
+}
 
-//void a()
-//{
-//	volatile size_t x{};
-//	ptr = ((size_t*)y-((void*) & x));
-//	buf = malloc(ptr);
-//	memcpy(buf, (void*)y, ptr);
-//
-//	r.emplace(resuma());
-//}
+ver::delayed_action long_process()
+{
+	puts(__FUNCTION__ " begin");
+	func();
+	puts(__FUNCTION__ " end");
+	co_return;
+}
 
-//void B()
-//{
-//	a();
-//}
-//
-//void c()
-//{
-//	volatile size_t x{};
-//	y = &x;
-//	B();
-//	int i = 10;
-//	i++;
-//}
+ver::delayed_operation<int> short_process()
+{
+	puts(__FUNCTION__ " begin");
+	co_await 0.5;
+	puts(__FUNCTION__ " end");
+	co_return 10;
+}
 
-//ver::fire_and_forget u()
-//{
-//	volatile size_t x{};
-//	y = &x;
-//	while (true)
-//	{
-//		
-//	}
-//}
-
-//int main()
-//{
-//	u();
-//
-//}
 int main()
 {
-	{
-		Scheduler sc(20);
-		Process p;
-		sc.enqueue(p);
+	auto lproc = long_process();
+	auto sproc = short_process();
 
-		sc.start();
-	}
+	scheduler.push(sproc.m_handle);
+	scheduler.push(lproc.m_handle);
+	scheduler.front().resume();
 
-
-	int a = 1;
-	a++;
-	return 0;
+	return *sproc.get();
 }
