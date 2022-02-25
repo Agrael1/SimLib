@@ -10,6 +10,13 @@ set(CMAKE_CXX_STANDARD 23)
 # include header files
 include_directories(include)
 
+set(VERSION_FILE ${CMAKE_SOURCE_DIR}/include/version.h)
+
+### Read version file ###
+if(NOT EXISTS ${VERSION_FILE})
+    file(CREATE ${VERSION_FILE})
+endif()
+
 add_executable(${PROJECT_NAME} "src/EntryMain.cpp" "include/Promises.h" "include/Version.h")
 
 ADD_CUSTOM_TARGET(

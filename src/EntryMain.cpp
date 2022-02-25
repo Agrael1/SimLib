@@ -1,4 +1,12 @@
 #include <Promises.h>
+#include <source_location>
+#include <string_view>
+#include <cstdio>
+
+void print(std::string_view r, std::source_location a = std::source_location::current())
+{
+	printf("%s %s\n", a.function_name(), r.data());
+}
 
 ver::action Wait()
 {
@@ -7,26 +15,26 @@ ver::action Wait()
 
 void func()
 {
-	puts(__FUNCTION__ " begin");
+	print("begin");
 	Wait();
-	puts(__FUNCTION__ " wait");
+	print("wait");
 	Wait();
-	puts(__FUNCTION__ " end");
+	print("end");
 }
 
 ver::delayed_action long_process()
 {
-	puts(__FUNCTION__ " begin");
+	print("begin");
 	func();
-	puts(__FUNCTION__ " end");
+	print("end");
 	co_return;
 }
 
 ver::delayed_operation<int> short_process()
 {
-	puts(__FUNCTION__ " begin");
+	print("begin");
 	co_await 0.5;
-	puts(__FUNCTION__ " end");
+	print("end");
 	co_return 10;
 }
 

@@ -8,24 +8,24 @@ std::queue<std::coroutine_handle<>> scheduler;
 
 namespace ver
 {
-	struct fire_and_forget
-	{
-		struct promise_type
-		{
-			auto get_return_object() noexcept {
-				return ver::fire_and_forget{ std::coroutine_handle<promise_type>::from_promise(*this) };
-			}
-			void return_void() const noexcept {}
-			std::suspend_never initial_suspend() const noexcept { return{}; }
-			std::suspend_never final_suspend() const noexcept { return{}; }
-			void unhandled_exception() const noexcept {}
-		};
-	public:
-		explicit fire_and_forget(std::coroutine_handle<promise_type> handle)
-			: m_handle(handle) {}
-	public:
-		std::coroutine_handle<promise_type> m_handle;
-	};
+	//struct fire_and_forget
+	//{
+	//	struct promise_type
+	//	{
+	//		auto get_return_object() noexcept {
+	//			return ver::fire_and_forget{ std::coroutine_handle<promise_type>::from_promise(*this) };
+	//		}
+	//		void return_void() const noexcept {}
+	//		std::suspend_never initial_suspend() const noexcept { return{}; }
+	//		std::suspend_never final_suspend() const noexcept { return{}; }
+	//		void unhandled_exception() const noexcept {}
+	//	};
+	//public:
+	//	explicit fire_and_forget(std::coroutine_handle<promise_type> handle)
+	//		: m_handle(handle) {}
+	//public:
+	//	std::coroutine_handle<promise_type> m_handle;
+	//};
 
 
 	template <typename T, typename _Enable = void>
@@ -67,7 +67,7 @@ namespace ver
 		struct promise_type : public promise_return_base<T>
 		{
 			auto get_return_object() noexcept {
-				return ver::basic_action{ std::coroutine_handle<promise_type>::from_promise(*this) };
+				return ver::basic_action<T, _Initial>{ std::coroutine_handle<basic_action<T, _Initial>::promise_type>::from_promise(*this) };
 			}
 			_Initial initial_suspend() const noexcept { return{}; }
 			std::suspend_always final_suspend() const noexcept { return{}; }
